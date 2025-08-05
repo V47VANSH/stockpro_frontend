@@ -48,7 +48,13 @@ export default function SignalsPage() {
         throw new Error(`Error: ${response.status}`);
       }
       const result = await response.json();
-      setSignals(result);
+      
+      // Sort signals by generation_time, latest first
+      const sortedSignals = result.sort((a: ActiveSignal, b: ActiveSignal) => 
+        new Date(b.generation_time).getTime() - new Date(a.generation_time).getTime()
+      );
+      
+      setSignals(sortedSignals);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch signals');
       setSignals([]);

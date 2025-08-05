@@ -50,22 +50,38 @@ export default function MarketDataPage() {
 
       if (camarillaRes.status === 'fulfilled' && camarillaRes.value.ok) {
         const data = await camarillaRes.value.json();
-        setCamarillaData(Array.isArray(data) ? data : []);
+        // Sort by timestamp, newest first
+        const sortedData = Array.isArray(data) 
+          ? [...data].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          : [];
+        setCamarillaData(sortedData);
       }
 
       if (breakoutRes.status === 'fulfilled' && breakoutRes.value.ok) {
         const data = await breakoutRes.value.json();
-        setBreakoutData(Array.isArray(data) ? data : []);
+        // Sort by timestamp, newest first
+        const sortedData = Array.isArray(data) 
+          ? [...data].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          : [];
+        setBreakoutData(sortedData);
       }
 
       if (volumeRes.status === 'fulfilled' && volumeRes.value.ok) {
         const data = await volumeRes.value.json();
-        setVolumeData(Array.isArray(data) ? data : []);
+        // Sort by timestamp, newest first
+        const sortedData = Array.isArray(data) 
+          ? [...data].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          : [];
+        setVolumeData(sortedData);
       }
 
       if (vwapRes.status === 'fulfilled' && vwapRes.value.ok) {
         const data = await vwapRes.value.json();
-        setVwapData(Array.isArray(data) ? data : []);
+        // Sort by timestamp, newest first
+        const sortedData = Array.isArray(data) 
+          ? [...data].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+          : [];
+        setVwapData(sortedData);
       }
     } catch (err) {
       setError('Failed to fetch market data');
