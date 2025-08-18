@@ -25,26 +25,55 @@ export default function Page() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = async (index: string) => {
+  const connectSSE = (index: string) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/get_mover?index=${index}`);
-      if (!response.ok) {
-        throw new Error(`Error: ${response.status}`);
+      if (typeof window === 'undefined' || !('EventSource' in window)) {
+        fetch(`/api/get_mover?index=${index}`)
+          .then(async (r) => {
+            if (!r.ok) throw new Error(`Error: ${r.status}`);
+            return r.json();
+          })
+          .then((json) => setData(json))
+          .catch((e) => {
+            setError(e instanceof Error ? e.message : 'Failed to fetch data');
+            setData(null);
+          })
+          .finally(() => setLoading(false));
+        return () => {};
       }
-      const result = await response.json();
-      setData(result);
+
+      const es = new EventSource(`/api/get_mover?index=${index}&stream=1`);
+      const onUpdate = (ev: MessageEvent) => {
+        try {
+          const payload = JSON.parse(ev.data);
+          setData(payload);
+          setLoading(false);
+        } catch {}
+      };
+      const onError = () => {
+        setError('Connection lost');
+        setLoading(false);
+      };
+      es.addEventListener('update', onUpdate as EventListener);
+      es.addEventListener('init', onUpdate as EventListener);
+      es.addEventListener('error', onError as EventListener);
+      es.onerror = onError as any;
+
+      return () => {
+        es.close();
+      };
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch data');
-      setData(null);
-    } finally {
+      setError('Failed to connect');
       setLoading(false);
+      return () => {};
     }
   };
 
   useEffect(() => {
-    fetchData(selectedIndex);
+    const cleanup = connectSSE(selectedIndex);
+    return cleanup;
   }, [selectedIndex]);
 
   const formatValue = (value: number) => {

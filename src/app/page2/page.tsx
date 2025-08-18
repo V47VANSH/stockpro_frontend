@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface BreakoutEvent {
   timestamp: string;
@@ -35,65 +35,66 @@ export default function MarketDataPage() {
   const [volumeEvents, setVolumeEvents] = useState<VolumeEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const streamsCleanup = useRef<null | (() => void)>(null);
 
   useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        // Fetch all event types in parallel
-        const [breakoutRes, vwapRes, camarillaRes, volumeRes] = await Promise.all([
-          fetch('/api/get_hilo'),
-          fetch('/api/get_vwap'),
-          fetch('/api/get_camrilla'),
-          fetch('/api/get_val')
-        ]);
-        
-        // Check responses
-        if (!breakoutRes.ok) throw new Error(`Breakout data error: ${breakoutRes.status}`);
-        if (!vwapRes.ok) throw new Error(`VWAP data error: ${vwapRes.status}`);
-        if (!camarillaRes.ok) throw new Error(`Camarilla data error: ${camarillaRes.status}`);
-        if (!volumeRes.ok) throw new Error(`Volume data error: ${volumeRes.status}`);
+    // Close existing streams if any
+    streamsCleanup.current?.();
+    setLoading(true);
+    setError(null);
 
-        // Parse data
-        const breakoutData = await breakoutRes.json();
-        const vwapData = await vwapRes.json();
-        const camarillaData = await camarillaRes.json();
-        const volumeData = await volumeRes.json();
+    const sortByTime = <T extends { timestamp: string }>(arr: T[]) =>
+      [...arr].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-        // Sort data by timestamp (newest first) - create new sorted arrays to avoid mutating original
-        setBreakoutEvents(
-          [...breakoutData].sort((a: BreakoutEvent, b: BreakoutEvent) => 
-            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-          )
-        );
-        
-        setVwapEvents(
-          [...vwapData].sort((a: VWAPEvent, b: VWAPEvent) => 
-            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-          )
-        );
-        
-        setCamarillaEvents(
-          [...camarillaData].sort((a: CamarillaEvent, b: CamarillaEvent) => 
-            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-          )
-        );
-        
-        setVolumeEvents(
-          [...volumeData].sort((a: VolumeEvent, b: VolumeEvent) => 
-            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-          )
-        );
-        
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to fetch market events data');
-      } finally {
-        setLoading(false);
+    const esList: EventSource[] = [];
+    const connect = (url: string, onData: (data: any) => void) => {
+      if (typeof window === 'undefined' || !('EventSource' in window)) {
+        fetch(url.replace('&stream=1', ''))
+          .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`Error: ${r.status}`))))
+          .then(onData)
+          .catch((e) => setError(e.message))
+          .finally(() => setLoading(false));
+        return;
       }
+      const es = new EventSource(url);
+      const onUpdate = (ev: MessageEvent) => {
+        try {
+          const parsed = JSON.parse(ev.data);
+          onData(parsed);
+          setLoading(false);
+        } catch {}
+      };
+      const onError = () => {
+        setError('Connection lost');
+        setLoading(false);
+      };
+      es.addEventListener('update', onUpdate as EventListener);
+      es.addEventListener('init', onUpdate as EventListener);
+      es.addEventListener('error', onError as EventListener);
+      es.onerror = onError as any;
+      esList.push(es);
     };
 
-    fetchData();
+    connect('/api/get_hilo?stream=1', (data) => {
+      const arr = Array.isArray(data) ? sortByTime<BreakoutEvent>(data) : [];
+      setBreakoutEvents(arr);
+    });
+    connect('/api/get_vwap?stream=1', (data) => {
+      const arr = Array.isArray(data) ? sortByTime<VWAPEvent>(data) : [];
+      setVwapEvents(arr);
+    });
+    connect('/api/get_camrilla?stream=1', (data) => {
+      const arr = Array.isArray(data) ? sortByTime<CamarillaEvent>(data) : [];
+      setCamarillaEvents(arr);
+    });
+    connect('/api/get_val?stream=1', (data) => {
+      const arr = Array.isArray(data) ? sortByTime<VolumeEvent>(data) : [];
+      setVolumeEvents(arr);
+    });
+
+    const cleanup = () => esList.forEach((es) => es.close());
+    streamsCleanup.current = cleanup;
+    return cleanup;
   }, []);
 
   const formatDateTime = (dateString: string) => {

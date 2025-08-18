@@ -59,7 +59,9 @@ def fetch_active_signals(conn, tf):
 
 def store_signals_to_redis(r, key, signals):
     payload = [sig.model_dump() for sig in signals]
-    r.set(key, json.dumps(payload, cls=DateTimeEncoder))
+    j = json.dumps(payload, cls=DateTimeEncoder)
+    r.set(key, j)
+    r.publish(f"chan:{key}", j)
 
 def page3(conn, redis_client, tf: int):
     """

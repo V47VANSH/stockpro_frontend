@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface NDayHighLow {
   timestamp: string;
@@ -35,67 +35,75 @@ export default function MarketDataPage() {
   const [vwapData, setVwapData] = useState<VWAP[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const streamsCleanup = useRef<null | (() => void)>(null);
 
-  const fetchData = async () => {
+  const connectAll = () => {
+    // Close existing streams first
+    streamsCleanup.current?.();
     setLoading(true);
     setError(null);
-    
-    try {
-      const [camarillaRes, breakoutRes, volumeRes, vwapRes] = await Promise.allSettled([
-        fetch('/api/get_camrilla'),
-        fetch('/api/get_hilo'),
-        fetch('/api/get_val'),
-        fetch('/api/get_vwap')
-      ]);
 
-      if (camarillaRes.status === 'fulfilled' && camarillaRes.value.ok) {
-        const data = await camarillaRes.value.json();
-        // Sort by timestamp, newest first
-        const sortedData = Array.isArray(data) 
-          ? [...data].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-          : [];
-        setCamarillaData(sortedData);
-      }
+    const sortByTime = <T extends { timestamp: string }>(arr: T[]) =>
+      [...arr].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
-      if (breakoutRes.status === 'fulfilled' && breakoutRes.value.ok) {
-        const data = await breakoutRes.value.json();
-        // Sort by timestamp, newest first
-        const sortedData = Array.isArray(data) 
-          ? [...data].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-          : [];
-        setBreakoutData(sortedData);
-      }
+    const esList: EventSource[] = [];
 
-      if (volumeRes.status === 'fulfilled' && volumeRes.value.ok) {
-        const data = await volumeRes.value.json();
-        // Sort by timestamp, newest first
-        const sortedData = Array.isArray(data) 
-          ? [...data].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-          : [];
-        setVolumeData(sortedData);
+    const connect = (url: string, onData: (data: any) => void) => {
+      if (typeof window === 'undefined' || !('EventSource' in window)) {
+        // Fallback fetch
+        fetch(url.replace('&stream=1', ''))
+          .then((r) => r.ok ? r.json() : Promise.reject(new Error(`Error: ${r.status}`)))
+          .then(onData)
+          .catch((e) => setError(e.message))
+          .finally(() => setLoading(false));
+        return;
       }
+      const es = new EventSource(url);
+      const onUpdate = (ev: MessageEvent) => {
+        try {
+          const parsed = JSON.parse(ev.data);
+          onData(parsed);
+          setLoading(false);
+        } catch {}
+      };
+      const onError = () => {
+        setError('Connection lost');
+        setLoading(false);
+      };
+      es.addEventListener('update', onUpdate as EventListener);
+      es.addEventListener('init', onUpdate as EventListener);
+      es.addEventListener('error', onError as EventListener);
+      es.onerror = onError as any;
+      esList.push(es);
+    };
 
-      if (vwapRes.status === 'fulfilled' && vwapRes.value.ok) {
-        const data = await vwapRes.value.json();
-        // Sort by timestamp, newest first
-        const sortedData = Array.isArray(data) 
-          ? [...data].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-          : [];
-        setVwapData(sortedData);
-      }
-    } catch (err) {
-      setError('Failed to fetch market data');
-      console.error('Market data fetch error:', err);
-    } finally {
-      setLoading(false);
-    }
+    connect('/api/get_camrilla?stream=1', (data) => {
+      const arr = Array.isArray(data) ? sortByTime<Camarilla>(data) : [];
+      setCamarillaData(arr);
+    });
+    connect('/api/get_hilo?stream=1', (data) => {
+      const arr = Array.isArray(data) ? sortByTime<NDayHighLow>(data) : [];
+      setBreakoutData(arr);
+    });
+    connect('/api/get_val?stream=1', (data) => {
+      const arr = Array.isArray(data) ? sortByTime<Vals>(data) : [];
+      setVolumeData(arr);
+    });
+    connect('/api/get_vwap?stream=1', (data) => {
+      const arr = Array.isArray(data) ? sortByTime<VWAP>(data) : [];
+      setVwapData(arr);
+    });
+
+    const cleanup = () => {
+      esList.forEach((es) => es.close());
+    };
+    streamsCleanup.current = cleanup;
+    return cleanup;
   };
 
   useEffect(() => {
-    fetchData();
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
+  const cleanup = connectAll();
+  return cleanup;
   }, []);
 
   const formatTime = (timestamp: string) => {
@@ -122,11 +130,13 @@ export default function MarketDataPage() {
           <h1 className="text-4xl font-bold text-gray-800 mb-2">📊 Market Data Dashboard</h1>
           <p className="text-gray-600">Real-time market events and trading signals</p>
           <button
-            onClick={fetchData}
+            onClick={() => {
+              connectAll();
+            }}
             className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
             disabled={loading}
           >
-            {loading ? 'Refreshing...' : 'Refresh Data'}
+            {loading ? 'Connecting...' : 'Reconnect Streams'}
           </button>
         </div>
 

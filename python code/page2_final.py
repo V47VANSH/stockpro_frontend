@@ -179,22 +179,30 @@ class DateTimeEncoder(json.JSONEncoder):
 def store_breakout_events_to_redis(redis_client, events: List[NDayHighLow], key: str = "breakout_events"):
     """Store breakout events to Redis as JSON."""
     data = [event.model_dump() for event in events]
-    redis_client.set(key, json.dumps(data, cls=DateTimeEncoder))
+    payload = json.dumps(data, cls=DateTimeEncoder)
+    redis_client.set(key, payload)
+    redis_client.publish(f"chan:{key}", payload)
 
 def store_vwap_events_to_redis(redis_client, events: List[VWAP], key: str = "vwap_events"):
     """Store VWAP cross events to Redis as JSON."""
     data = [event.model_dump() for event in events]
-    redis_client.set(key, json.dumps(data, cls=DateTimeEncoder))
+    payload = json.dumps(data, cls=DateTimeEncoder)
+    redis_client.set(key, payload)
+    redis_client.publish(f"chan:{key}", payload)
 
 def store_camarilla_events_to_redis(redis_client, events: List[Camarilla], key: str = "camarilla_events"):
     """Store Camarilla cross events to Redis as JSON."""
     data = [event.model_dump() for event in events]
-    redis_client.set(key, json.dumps(data, cls=DateTimeEncoder))
+    payload = json.dumps(data, cls=DateTimeEncoder)
+    redis_client.set(key, payload)
+    redis_client.publish(f"chan:{key}", payload)
 
 def store_volume_events_to_redis(redis_client, events: List[Vals], key: str = "volume_events"):
     """Store unusual volume events to Redis as JSON."""
     data = [event.model_dump() for event in events]
-    redis_client.set(key, json.dumps(data, cls=DateTimeEncoder))
+    payload = json.dumps(data, cls=DateTimeEncoder)
+    redis_client.set(key, payload)
+    redis_client.publish(f"chan:{key}", payload)
 
 def page2_15(conn, redis_client,tf=15, period='weekly'):
     

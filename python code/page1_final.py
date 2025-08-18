@@ -28,27 +28,37 @@ def fetch_stock_movers() -> Dict[str, StockMovers]:
     
     if sensex_data:
         sensex_movers = StockMovers(pullers=sensex_data.get('pullers', []), draggers=sensex_data.get('draggers', []))
-        r.set("stock_movers:sensex", sensex_movers.model_dump_json())
+        payload = sensex_movers.model_dump_json()
+        r.set("stock_movers:sensex", payload)
+        r.publish("chan:stock_movers:sensex", payload)
         indices_data['sensex'] = sensex_movers
     
     if bankex_data:
         bankex_movers = StockMovers(pullers=bankex_data.get('pullers', []), draggers=bankex_data.get('draggers', []))
-        r.set("stock_movers:bankex", bankex_movers.model_dump_json())
+        payload = bankex_movers.model_dump_json()
+        r.set("stock_movers:bankex", payload)
+        r.publish("chan:stock_movers:bankex", payload)
         indices_data['bankex'] = bankex_movers
     
     if nifty_data:
         nifty_movers = StockMovers(pullers=nifty_data.get('pullers', []), draggers=nifty_data.get('draggers', []))
-        r.set("stock_movers:nifty50", nifty_movers.model_dump_json())
+        payload = nifty_movers.model_dump_json()
+        r.set("stock_movers:nifty50", payload)
+        r.publish("chan:stock_movers:nifty50", payload)
         indices_data['nifty50'] = nifty_movers
     
     if banknifty_data:
         banknifty_movers = StockMovers(pullers=banknifty_data.get('pullers', []), draggers=banknifty_data.get('draggers', []))
-        r.set("stock_movers:banknifty", banknifty_movers.model_dump_json())
+        payload = banknifty_movers.model_dump_json()
+        r.set("stock_movers:banknifty", payload)
+        r.publish("chan:stock_movers:banknifty", payload)
         indices_data['banknifty'] = banknifty_movers
     
     if niftymidcap_data:
         niftymidcap_movers = StockMovers(pullers=niftymidcap_data.get('pullers', []), draggers=niftymidcap_data.get('draggers', []))
-        r.set("stock_movers:niftymidcap", niftymidcap_movers.json())
+        payload = niftymidcap_movers.model_dump_json()
+        r.set("stock_movers:niftymidcap", payload)
+        r.publish("chan:stock_movers:niftymidcap", payload)
         indices_data['niftymidcap'] = niftymidcap_movers
     
     return indices_data

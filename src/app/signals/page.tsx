@@ -39,32 +39,60 @@ export default function SignalsPage() {
     { value: '1440', label: 'Daily' },
   ];
 
-  const fetchSignals = async (tf: string) => {
+  const connectSSE = (tf: string) => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`/api/get_signal?tf=${tf}`);
-      if (!response.ok) {
-        throw new Error(`Error: ${response.status}`);
+      if (typeof window === 'undefined' || !('EventSource' in window)) {
+        fetch(`/api/get_signal?tf=${tf}`)
+          .then(async (r) => {
+            if (!r.ok) throw new Error(`Error: ${r.status}`);
+            return r.json();
+          })
+          .then((data) => {
+            const sorted = Array.isArray(data)
+              ? data.sort((a: ActiveSignal, b: ActiveSignal) => new Date(b.generation_time).getTime() - new Date(a.generation_time).getTime())
+              : [];
+            setSignals(sorted);
+          })
+          .catch((e) => {
+            setError(e instanceof Error ? e.message : 'Failed to fetch signals');
+            setSignals([]);
+          })
+          .finally(() => setLoading(false));
+        return () => {};
       }
-      const result = await response.json();
-      
-      // Sort signals by generation_time, latest first
-      const sortedSignals = result.sort((a: ActiveSignal, b: ActiveSignal) => 
-        new Date(b.generation_time).getTime() - new Date(a.generation_time).getTime()
-      );
-      
-      setSignals(sortedSignals);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch signals');
-      setSignals([]);
-    } finally {
+
+      const es = new EventSource(`/api/get_signal?tf=${tf}&stream=1`);
+      const onUpdate = (ev: MessageEvent) => {
+        try {
+          const data = JSON.parse(ev.data);
+          const sorted = Array.isArray(data)
+            ? data.sort((a: ActiveSignal, b: ActiveSignal) => new Date(b.generation_time).getTime() - new Date(a.generation_time).getTime())
+            : [];
+          setSignals(sorted);
+          setLoading(false);
+        } catch {}
+      };
+      const onError = () => {
+        setError('Connection lost');
+        setLoading(false);
+      };
+      es.addEventListener('update', onUpdate as EventListener);
+      es.addEventListener('init', onUpdate as EventListener);
+      es.addEventListener('error', onError as EventListener);
+      es.onerror = onError as any;
+      return () => es.close();
+    } catch (e) {
+      setError('Failed to connect');
       setLoading(false);
+      return () => {};
     }
   };
 
   useEffect(() => {
-    fetchSignals(selectedTimeframe);
+    const cleanup = connectSSE(selectedTimeframe);
+    return cleanup;
   }, [selectedTimeframe]);
 
   const formatDate = (dateString: string) => {
