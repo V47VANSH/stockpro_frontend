@@ -1,5 +1,6 @@
 import { getRedisClient } from '@/lib/redis';
 import { getSSEHub } from '../../lib/sseHub';
+import { query as pgQuery } from '../../lib/postgres';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -9,8 +10,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!wantsSSE) {
     try {
       const client = await getRedisClient();
-      const data = await client.get('vwap_events');
-      if (!data) return res.status(404).json({ error: 'No VWAP data found' });
+      let data = await client.get('vwap_events');
+      if (!data) {
+        // Fallback to Postgres
+        try {
+          const pgRes = await pgQuery(`
+            SELECT 
+              timestamp, 
+              symbol, 
+              vwap, 
+              CASE 
+                WHEN crossed_above = true THEN 'above'
+                WHEN crossed_below = true THEN 'below'
+                ELSE NULL
+              END AS type
+            FROM weekly_vwap_cross_events_15
+            WHERE DATE(timestamp) = CURRENT_DATE
+          `);
+          if (!pgRes.rows || pgRes.rows.length === 0) {
+            return res.status(404).json({ error: 'No VWAP data found' });
+          }
+          data = JSON.stringify(pgRes.rows);
+          // Cache in Redis with 60 second expiration
+          await client.set('vwap_events', data, { EX: 60 });
+        } catch (pgErr) {
+          console.error('Postgres fallback error:', pgErr);
+          return res.status(500).json({ error: 'Internal Server Error' });
+        }
+      }
 
       res.status(200).json(JSON.parse(data));
     } catch (err) {

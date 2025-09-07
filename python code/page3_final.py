@@ -4,7 +4,7 @@ import json
 from datetime import datetime
 from decimal import Decimal
 from pydantic import BaseModel
-from app.config.settings import host, dbname, user, password
+from app.config.settings import host, dbname, user, password, rport , rhost
 
 # --- new model & encoder --------------------------------------------
 class ActiveSignal(BaseModel):
@@ -73,7 +73,7 @@ def page3(conn, redis_client, tf: int):
 if __name__ == "__main__":
     # ...existing code...
     with psycopg.connect(host=host, dbname=dbname, user=user, password=password) as conn:
-        r = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
+        r = redis.Redis(host=rhost, port=rport, db=0, decode_responses=True)
         # call for a single tf, e.g., 5 or 60
         tf = 5
         page3(conn, r, tf)

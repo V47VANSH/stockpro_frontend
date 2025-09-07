@@ -2,6 +2,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { getRedisClient } from '@/lib/redis';
 import { getSSEHub } from '../../lib/sseHub';
+import { query as pgQuery } from '../../lib/postgres';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -10,8 +11,33 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (!wantsSSE) {
     try {
       const client = await getRedisClient();
-      const data = await client.get('breakout_events');
-      if (!data) return res.status(404).json({ error: 'No breakout data found' });
+      let data = await client.get('breakout_events');
+      if (!data) {
+        // Fallback to Postgres
+        try {
+          const pgRes = await pgQuery(`
+            SELECT 
+              symbol,
+              event_time as timestamp,
+              event_type as type,
+              CASE 
+                WHEN event_type = 'HIGH' THEN prev7d_high
+                WHEN event_type = 'LOW' THEN prev7d_low
+              END AS value
+            FROM breakout_events7
+            WHERE DATE(event_time) = CURRENT_DATE
+          `);
+          if (!pgRes.rows || pgRes.rows.length === 0) {
+            return res.status(404).json({ error: 'No breakout data found' });
+          }
+          data = JSON.stringify(pgRes.rows);
+          // Cache in Redis with 60 second expiration
+          await client.set('breakout_events', data, { EX: 60 });
+        } catch (pgErr) {
+          console.error('Postgres fallback error:', pgErr);
+          return res.status(500).json({ error: 'Internal Server Error' });
+        }
+      }
 
       res.status(200).json(JSON.parse(data));
     } catch (err) {

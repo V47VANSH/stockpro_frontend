@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import AdvanceDeclineChart from '../components/AdvanceDeclineChart';
 
 interface StockMover {
   name: string;
@@ -12,11 +13,11 @@ interface MoversData {
 }
 
 const indices = [
-  { id: 'sensex', name: 'SENSEX', icon: '📊' },
   { id: 'nifty50', name: 'NIFTY 50', icon: '📈' },
-  { id: 'bankex', name: 'BANKEX', icon: '🏦' },
   { id: 'banknifty', name: 'BANK NIFTY', icon: '💰' },
-  { id: 'niftymidcap', name: 'NIFTY MIDCAP SELECT', icon: '📉' }
+  { id: 'niftymidcap', name: 'NIFTY MIDCAP SELECT', icon: '📉' },
+  { id: 'sensex', name: 'SENSEX', icon: '📊' },
+  { id: 'bankex', name: 'BANKEX', icon: '🏦' }
 ];
 
 export default function Page() {
@@ -87,25 +88,25 @@ export default function Page() {
   };
 
   return (
-    <main className="bg-gray-50 p-6 min-h-[calc(100vh-4rem)]">
+    <main className="p-6 min-h-[calc(100vh-4rem)]" style={{ background: 'var(--background)' }}>
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">📈 Stock Movers Dashboard</h1>
-          <p className="text-gray-600">Real-time stock market movers across major indices</p>
+          <h1 className="text-4xl font-bold text-strong mb-2">📈 Stock Movers Dashboard</h1>
+          <p className="text-muted">Real-time stock market movers across major indices</p>
         </div>
 
         {/* Index Selector */}
         <div className="flex justify-center mb-8">
-          <div className="bg-white rounded-lg shadow-md p-2 flex space-x-2">
+          <div className="rounded-lg shadow-card p-2 flex space-x-2 bg-card border border-default">
             {indices.map((index) => (
               <button
                 key={index.id}
                 onClick={() => setSelectedIndex(index.id)}
                 className={`px-6 py-3 rounded-lg font-medium transition-all duration-200 flex items-center space-x-2 ${
                   selectedIndex === index.id
-                    ? 'bg-blue-600 text-white shadow-lg'
-                    : 'text-gray-600 hover:bg-gray-100'
+                    ? 'bg-[var(--accent)] text-[var(--on-accent)] shadow-lg'
+                    : 'text-muted hover-surface'
                 }`}
               >
                 <span>{index.icon}</span>
@@ -118,56 +119,61 @@ export default function Page() {
         {/* Loading State */}
         {loading && (
           <div className="text-center py-12">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-            <p className="mt-2 text-gray-600">Loading data...</p>
+            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2" style={{ borderColor: 'var(--accent)' }}></div>
+            <p className="mt-2 text-muted">Loading data...</p>
           </div>
         )}
 
         {/* Error State */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+          <div className="rounded-lg p-4 mb-6" style={{ background: 'var(--card-bg)', border: '1px solid rgba(220,38,38,0.12)' }}>
             <p className="text-red-600 text-center">⚠️ {error}</p>
           </div>
         )}
+
+        {/* Advance Decline Chart - Above Data Tables */}
+        <div className="mt-8">
+          <AdvanceDeclineChart selectedIndex={selectedIndex} />
+        </div>
 
         {/* Data Display */}
         {data && !loading && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Pullers Table */}
-            <div className="bg-white rounded-lg shadow-md overflow-hidden">
-              <div className="bg-green-600 text-white px-6 py-4">
-                <h2 className="text-xl font-semibold flex items-center">
-                  🔼 Top Gainers ({data.pullers.length})
-                </h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50">
+            <div className="rounded-lg overflow-hidden bg-card border border-default">
+                <div className="px-6 py-4" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
+                  <h2 className="text-xl font-semibold flex items-center">
+                    🔼 Top Gainers ({data.pullers.length})
+                  </h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="table-head">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
                         Rank
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
                         Stock
                       </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        <th className="px-6 py-3 text-right text-xs font-medium text-muted uppercase tracking-wider">
                         Points
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                    <tbody className="divide-y" style={{ background: 'var(--card-bg)', borderColor: 'var(--border-default)' }}>
                     {data.pullers.map(([name, value], index) => (
-                      <tr key={name} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          #{index + 1}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                          {name}
-                        </td>
-                        <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-right ${getColorClass(value)}`}>
-                          {formatValue(value)}
-                        </td>
-                      </tr>
+                        <tr key={name} className="hover-surface transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-muted">
+                            #{index + 1}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-strong">
+                            {name}
+                          </td>
+                          <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-right ${getColorClass(value)}`}>
+                            {formatValue(value)}
+                          </td>
+                        </tr>
                     ))}
                   </tbody>
                 </table>
@@ -175,34 +181,34 @@ export default function Page() {
             </div>
 
             {/* Draggers Table */}
-            <div className="bg-white rounded-lg shadow-md overflow-hidden">
-              <div className="bg-red-600 text-white px-6 py-4">
+            <div className="rounded-lg overflow-hidden bg-card border border-default">
+              <div className="px-6 py-4" style={{ background: '#dc2626', color: 'white' }}>
                 <h2 className="text-xl font-semibold flex items-center">
                   🔽 Top Losers ({data.draggers.length})
                 </h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gray-50">
+                  <thead className="table-head">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
                         Rank
                       </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-left text-xs font-medium text-muted uppercase tracking-wider">
                         Stock
                       </th>
-                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      <th className="px-6 py-3 text-right text-xs font-medium text-muted uppercase tracking-wider">
                         Points
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
+                  <tbody className="divide-y" style={{ background: 'var(--card-bg)', borderColor: 'var(--border-default)' }}>
                     {data.draggers.map(([name, value], index) => (
-                      <tr key={name} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      <tr key={name} className="hover-surface transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-muted">
                           #{index + 1}
                         </td>
-                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-strong">
                           {name}
                         </td>
                         <td className={`px-6 py-4 whitespace-nowrap text-sm font-semibold text-right ${getColorClass(value)}`}>
@@ -220,7 +226,7 @@ export default function Page() {
         {/* Empty State */}
         {!data && !loading && !error && (
           <div className="text-center py-12">
-            <p className="text-gray-500">Select an index to view stock movers</p>
+            <p className="text-muted">Select an index to view stock movers</p>
           </div>
         )}
       </div>

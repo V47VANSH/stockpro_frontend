@@ -4,6 +4,7 @@ import json
 from typing import List, Tuple, Dict
 from pydantic import BaseModel
 from datetime import datetime
+from app.config.settings import host, dbname, user, password , rhost, rport
 
 
 class NDayHighLow(BaseModel):
@@ -227,9 +228,9 @@ def page2_1(conn, redis_client):
 ##############################################################################################
 
 if __name__ == "__main__":
-    conn = psycopg2.connect(host='localhost', dbname='StockMarketData', user='postgres', password="2478")
-    redis_client = redis.Redis(host='localhost', port=6379, db=0, decode_responses=True)
-    
+    conn = psycopg2.connect(host=host, dbname=dbname, user=user, password=password)
+    redis_client = redis.Redis(host=rhost, port=rport, db=0, decode_responses=True)
+
     events = fetch_breakout_events(conn)
     events2 = fetch_vwap_cross_events(conn)
     events3 = fetch_camarilla_cross_events(conn, tf=15, period='weekly')
