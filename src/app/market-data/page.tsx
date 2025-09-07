@@ -1,5 +1,28 @@
 'use client';
-import { useEffect, useRef, useState, DragEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+// Symbol Stars component to show which tables contain the symbol
+interface SymbolStarsProps {
+  symbol: string;
+  inCamarilla: boolean;
+  inHighLow: boolean;
+  inVolume: boolean;
+  inVWAP: boolean;
+}
+
+const SymbolStars: React.FC<SymbolStarsProps> = ({ symbol, inCamarilla, inHighLow, inVolume, inVWAP }) => {
+  return (
+    <>
+      {symbol}{' '}
+      <span style={{ fontSize: '0.8em' }}>
+        {inCamarilla && <span style={{ color: '#7c3aed' }}>★</span>}
+        {inHighLow && <span style={{ color: '#f97316' }}>★</span>}
+        {inVolume && <span style={{ color: '#2563eb' }}>★</span>}
+        {inVWAP && <span style={{ color: '#16a34a' }}>★</span>}
+      </span>
+    </>
+  );
+};
 
 interface NDayHighLow {
   timestamp: string;
@@ -36,6 +59,16 @@ export default function MarketDataPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const streamsCleanup = useRef<null | (() => void)>(null);
+  
+  // Function to check if a symbol appears in different datasets
+  const getSymbolPresence = (symbol: string) => {
+    const inCamarilla = camarillaData.some(item => item.symbol === symbol);
+    const inHighLow = breakoutData.some(item => item.symbol === symbol);
+    const inVolume = volumeData.some(item => item.symbol === symbol);
+    const inVWAP = vwapData.some(item => item.symbol === symbol);
+    
+    return { inCamarilla, inHighLow, inVolume, inVWAP };
+  };
 
   const connectAll = () => {
     // Close existing streams first
@@ -48,7 +81,7 @@ export default function MarketDataPage() {
 
     const esList: EventSource[] = [];
 
-    const connect = (url: string, onData: (data: any) => void) => {
+    const connect = <T extends { timestamp: string }>(url: string, onData: (data: T[]) => void) => {
       if (typeof window === 'undefined' || !('EventSource' in window)) {
         // Fallback fetch
         fetch(url.replace('&stream=1', ''))
@@ -73,24 +106,24 @@ export default function MarketDataPage() {
       es.addEventListener('update', onUpdate as EventListener);
       es.addEventListener('init', onUpdate as EventListener);
       es.addEventListener('error', onError as EventListener);
-      es.onerror = onError as any;
+      es.onerror = onError as EventListener;
       esList.push(es);
     };
 
-    connect('/api/get_camrilla?stream=1', (data) => {
-      const arr = Array.isArray(data) ? sortByTime<Camarilla>(data) : [];
+    connect<Camarilla>('/api/get_camrilla?stream=1', (data) => {
+      const arr = Array.isArray(data) ? sortByTime<Camarilla>(data as Camarilla[]) : [];
       setCamarillaData(arr);
     });
-    connect('/api/get_hilo?stream=1', (data) => {
-      const arr = Array.isArray(data) ? sortByTime<NDayHighLow>(data) : [];
+    connect<NDayHighLow>('/api/get_hilo?stream=1', (data) => {
+      const arr = Array.isArray(data) ? sortByTime<NDayHighLow>(data as NDayHighLow[]) : [];
       setBreakoutData(arr);
     });
-    connect('/api/get_val?stream=1', (data) => {
-      const arr = Array.isArray(data) ? sortByTime<Vals>(data) : [];
+    connect<Vals>('/api/get_val?stream=1', (data) => {
+      const arr = Array.isArray(data) ? sortByTime<Vals>(data as Vals[]) : [];
       setVolumeData(arr);
     });
-    connect('/api/get_vwap?stream=1', (data) => {
-      const arr = Array.isArray(data) ? sortByTime<VWAP>(data) : [];
+    connect<VWAP>('/api/get_vwap?stream=1', (data) => {
+      const arr = Array.isArray(data) ? sortByTime<VWAP>(data as VWAP[]) : [];
       setVwapData(arr);
     });
 
@@ -256,7 +289,6 @@ export default function MarketDataPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {eventOrder.map((key, idx) => {
               const wrapperProps = {
-                key: key,
                 draggable: true,
                 onDragStart: (e: React.DragEvent<HTMLDivElement>) => onEventDragStart(e, idx),
                 onDragOver: onEventDragOver,
@@ -265,11 +297,11 @@ export default function MarketDataPage() {
                 onDrop: (e: React.DragEvent<HTMLDivElement>) => onEventDrop(e, idx),
                 onDragEnd: onEventDragEnd,
                 className: 'rounded-lg overflow-hidden bg-card border border-default cursor-move',
-              } as any;
+              };
 
               if (key === 'camarilla') {
                 return (
-                  <div {...wrapperProps}>
+                  <div key={`event-${idx}`} {...wrapperProps}>
                     <div className="px-6 py-4" style={{ background: '#7c3aed', color: 'white' }}>
                       <h2 className="text-xl font-semibold flex items-center">
                         🎯 Camarilla Events ({camarillaData.length})
@@ -286,20 +318,31 @@ export default function MarketDataPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y" style={{ background: 'var(--card-bg)' }}>
-                          {camarillaData.length > 0 ? camarillaData.map((item, index) => (
-                            <tr key={index} className="hover-surface transition-colors">
-                              <td className="px-4 py-3 text-sm font-medium text-strong">{item.symbol}</td>
-                              <td className="px-4 py-3 text-sm text-strong text-right">₹{formatPrice(item.camarilla)}</td>
-                              <td className="px-4 py-3 text-sm text-center">
-                                <span className={`px-2 py-1 rounded-full text-xs ${getTypeBadgeColor(item.type)}`}>
-                                  {item.type}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-sm text-muted text-center">
-                                {formatTime(item.timestamp)}
-                              </td>
-                            </tr>
-                          )) : (
+                          {camarillaData.length > 0 ? camarillaData.map((item) => {
+                            const presence = getSymbolPresence(item.symbol);
+                            return (
+                              <tr key={`camarilla-${item.symbol}-${item.timestamp}`} className="hover-surface transition-colors">
+                                <td className="px-4 py-3 text-sm font-medium text-strong">
+                                  <SymbolStars 
+                                    symbol={item.symbol}
+                                    inCamarilla={presence.inCamarilla}
+                                    inHighLow={presence.inHighLow}
+                                    inVolume={presence.inVolume}
+                                    inVWAP={presence.inVWAP}
+                                  />
+                                </td>
+                                <td className="px-4 py-3 text-sm text-strong text-right">₹{formatPrice(item.camarilla)}</td>
+                                <td className="px-4 py-3 text-sm text-center">
+                                  <span className={`px-2 py-1 rounded-full text-xs ${getTypeBadgeColor(item.type)}`}>
+                                    {item.type}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-muted text-center">
+                                  {formatTime(item.timestamp)}
+                                </td>
+                              </tr>
+                            );
+                          }) : (
                             <tr>
                               <td colSpan={4} className="px-4 py-8 text-center text-muted">
                                 No Camarilla events available
@@ -315,7 +358,7 @@ export default function MarketDataPage() {
 
               if (key === 'highlow') {
                 return (
-                  <div {...wrapperProps}>
+                  <div key={`event-${idx}`} {...wrapperProps}>
                     <div className="px-6 py-4" style={{ background: '#f97316', color: 'white' }}>
                       <h2 className="text-xl font-semibold flex items-center">
                         📈 High/Low Events ({breakoutData.length})
@@ -332,20 +375,31 @@ export default function MarketDataPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y" style={{ background: 'var(--card-bg)' }}>
-                          {breakoutData.length > 0 ? breakoutData.map((item, index) => (
-                            <tr key={index} className="hover-surface transition-colors">
-                              <td className="px-4 py-3 text-sm font-medium text-strong">{item.symbol}</td>
-                              <td className="px-4 py-3 text-sm text-strong text-right">₹{formatPrice(item.value)}</td>
-                              <td className="px-4 py-3 text-sm text-center">
-                                <span className={`font-semibold ${getTypeColor(item.type)}`}>
-                                  {item.type.toUpperCase()}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-sm text-muted text-center">
-                                {formatTime(item.timestamp)}
-                              </td>
-                            </tr>
-                          )) : (
+                          {breakoutData.length > 0 ? breakoutData.map((item) => {
+                            const presence = getSymbolPresence(item.symbol);
+                            return (
+                              <tr key={`highlow-${item.symbol}-${item.timestamp}`} className="hover-surface transition-colors">
+                                <td className="px-4 py-3 text-sm font-medium text-strong">
+                                  <SymbolStars 
+                                    symbol={item.symbol}
+                                    inCamarilla={presence.inCamarilla}
+                                    inHighLow={presence.inHighLow}
+                                    inVolume={presence.inVolume}
+                                    inVWAP={presence.inVWAP}
+                                  />
+                                </td>
+                                <td className="px-4 py-3 text-sm text-strong text-right">₹{formatPrice(item.value)}</td>
+                                <td className="px-4 py-3 text-sm text-center">
+                                  <span className={`font-semibold ${getTypeColor(item.type)}`}>
+                                    {item.type.toUpperCase()}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-muted text-center">
+                                  {formatTime(item.timestamp)}
+                                </td>
+                              </tr>
+                            );
+                          }) : (
                             <tr>
                               <td colSpan={4} className="px-4 py-8 text-center text-muted">
                                 No high/low events available
@@ -361,7 +415,7 @@ export default function MarketDataPage() {
 
               if (key === 'volume') {
                 return (
-                  <div {...wrapperProps}>
+                  <div key={`event-${idx}`} {...wrapperProps}>
                     <div className="px-6 py-4" style={{ background: '#2563eb', color: 'white' }}>
                       <h2 className="text-xl font-semibold flex items-center">
                         📊 Volume Events ({volumeData.length})
@@ -377,17 +431,28 @@ export default function MarketDataPage() {
                           </tr>
                         </thead>
                         <tbody className="divide-y" style={{ background: 'var(--card-bg)' }}>
-                          {volumeData.length > 0 ? volumeData.map((item, index) => (
-                            <tr key={index} className="hover-surface transition-colors">
-                              <td className="px-4 py-3 text-sm font-medium text-strong">{item.symbol}</td>
-                              <td className="px-4 py-3 text-sm text-strong text-right">
-                                {item.value?.toLocaleString()}
-                              </td>
-                              <td className="px-4 py-3 text-sm text-muted text-center">
-                                {formatTime(item.timestamp)}
-                              </td>
-                            </tr>
-                          )) : (
+                          {volumeData.length > 0 ? volumeData.map((item) => {
+                            const presence = getSymbolPresence(item.symbol);
+                            return (
+                              <tr key={`volume-${item.symbol}-${item.timestamp}`} className="hover-surface transition-colors">
+                                <td className="px-4 py-3 text-sm font-medium text-strong">
+                                  <SymbolStars 
+                                    symbol={item.symbol}
+                                    inCamarilla={presence.inCamarilla}
+                                    inHighLow={presence.inHighLow}
+                                    inVolume={presence.inVolume}
+                                    inVWAP={presence.inVWAP}
+                                  />
+                                </td>
+                                <td className="px-4 py-3 text-sm text-strong text-right">
+                                  {item.value?.toLocaleString()}
+                                </td>
+                                <td className="px-4 py-3 text-sm text-muted text-center">
+                                  {formatTime(item.timestamp)}
+                                </td>
+                              </tr>
+                            );
+                          }) : (
                             <tr>
                               <td colSpan={3} className="px-4 py-8 text-center text-muted">
                                 No volume events available
@@ -403,7 +468,7 @@ export default function MarketDataPage() {
 
               // vwap
               return (
-                <div {...wrapperProps}>
+                <div key={`event-${idx}`} {...wrapperProps}>
                   <div className="px-6 py-4" style={{ background: '#16a34a', color: 'white' }}>
                     <h2 className="text-xl font-semibold flex items-center">
                       📈 VWAP Events ({vwapData.length})
@@ -420,20 +485,31 @@ export default function MarketDataPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y" style={{ background: 'var(--card-bg)' }}>
-                        {vwapData.length > 0 ? vwapData.map((item, index) => (
-                          <tr key={index} className="hover-surface transition-colors">
-                            <td className="px-4 py-3 text-sm font-medium text-strong">{item.symbol}</td>
-                            <td className="px-4 py-3 text-sm text-strong text-right">₹{item.vwap?.toFixed(2)}</td>
-                            <td className="px-4 py-3 text-sm text-center">
-                              <span className={`px-2 py-1 rounded-full text-xs ${getTypeBadgeColor(item.type)}`}>
-                                {item.type}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-sm text-muted text-center">
-                              {formatTime(item.timestamp)}
-                            </td>
-                          </tr>
-                        )) : (
+                        {vwapData.length > 0 ? vwapData.map((item) => {
+                          const presence = getSymbolPresence(item.symbol);
+                          return (
+                            <tr key={`vwap-${item.symbol}-${item.timestamp}`} className="hover-surface transition-colors">
+                              <td className="px-4 py-3 text-sm font-medium text-strong">
+                                <SymbolStars 
+                                  symbol={item.symbol}
+                                  inCamarilla={presence.inCamarilla}
+                                  inHighLow={presence.inHighLow}
+                                  inVolume={presence.inVolume}
+                                  inVWAP={presence.inVWAP}
+                                />
+                              </td>
+                              <td className="px-4 py-3 text-sm text-strong text-right">₹{item.vwap?.toFixed(2)}</td>
+                              <td className="px-4 py-3 text-sm text-center">
+                                <span className={`px-2 py-1 rounded-full text-xs ${getTypeBadgeColor(item.type)}`}>
+                                  {item.type}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-sm text-muted text-center">
+                                {formatTime(item.timestamp)}
+                              </td>
+                            </tr>
+                          );
+                        }) : (
                           <tr>
                             <td colSpan={4} className="px-4 py-8 text-center text-muted">
                               No VWAP events available
@@ -454,7 +530,6 @@ export default function MarketDataPage() {
           <div className="mt-8 grid grid-cols-1 md:grid-cols-4 gap-4">
             {cardOrder.map((key, idx) => {
               const commonProps = {
-                key: key,
                 draggable: true,
                 onDragStart: (e: React.DragEvent<HTMLDivElement>) => onDragStart(e, idx),
                 onDragOver: onDragOver,
@@ -464,11 +539,11 @@ export default function MarketDataPage() {
                 onDragEnd: onDragEnd,
                 className: 'rounded-lg p-4 bg-card border border-default cursor-move',
                 style: { minHeight: 80 },
-              } as any;
+              };
 
               if (key === 'camarilla') {
                 return (
-                  <div {...commonProps}>
+                  <div key={`card-${idx}`} {...commonProps}>
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
                         <span className="text-2xl">🎯</span>
@@ -484,7 +559,7 @@ export default function MarketDataPage() {
 
               if (key === 'highlow') {
                 return (
-                  <div {...commonProps}>
+                  <div key={`card-${idx}`} {...commonProps}>
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
                         <span className="text-2xl">📈</span>
@@ -500,7 +575,7 @@ export default function MarketDataPage() {
 
               if (key === 'volume') {
                 return (
-                  <div {...commonProps}>
+                  <div key={`card-${idx}`} {...commonProps}>
                     <div className="flex items-center">
                       <div className="flex-shrink-0">
                         <span className="text-2xl">📊</span>
@@ -516,7 +591,7 @@ export default function MarketDataPage() {
 
               // vwap
               return (
-                <div {...commonProps}>
+                <div key={`card-${idx}`} {...commonProps}>
                   <div className="flex items-center">
                     <div className="flex-shrink-0">
                       <span className="text-2xl">📈</span>
