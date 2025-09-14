@@ -51,11 +51,37 @@ interface Camarilla {
   camarilla: number;
 }
 
+interface SymbolWithStars {
+  symbol: string;
+  starCount: number;
+  presence: {
+    inCamarilla: boolean;
+    inHighLow: boolean;
+    inVolume: boolean;
+    inVWAP: boolean;
+  };
+  timestamp: string;
+}
+
+interface StarCounts {
+  fourStars: number;
+  threeStars: number;
+  twoStars: number;
+  oneStar: number;
+}
+
 export default function MarketDataPage() {
   const [camarillaData, setCamarillaData] = useState<Camarilla[]>([]);
   const [breakoutData, setBreakoutData] = useState<NDayHighLow[]>([]);
   const [volumeData, setVolumeData] = useState<Vals[]>([]);
   const [vwapData, setVwapData] = useState<VWAP[]>([]);
+  const [starSymbols, setStarSymbols] = useState<SymbolWithStars[]>([]);
+  const [starCounts, setStarCounts] = useState<StarCounts>({
+    fourStars: 0,
+    threeStars: 0,
+    twoStars: 0,
+    oneStar: 0
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const streamsCleanup = useRef<null | (() => void)>(null);
@@ -110,21 +136,47 @@ export default function MarketDataPage() {
       esList.push(es);
     };
 
+    const updateStarData = () => {
+      const symbolMap = new Map<string, SymbolWithStars>();
+      
+      camarillaData.forEach(item => addSymbolPresence(item.symbol, item.timestamp, 'camarilla', symbolMap));
+      breakoutData.forEach(item => addSymbolPresence(item.symbol, item.timestamp, 'highlow', symbolMap));
+      volumeData.forEach(item => addSymbolPresence(item.symbol, item.timestamp, 'volume', symbolMap));
+      vwapData.forEach(item => addSymbolPresence(item.symbol, item.timestamp, 'vwap', symbolMap));
+
+      const symbols = Array.from(symbolMap.values())
+        .sort((a, b) => b.starCount - a.starCount || a.symbol.localeCompare(b.symbol));
+
+      const counts = {
+        fourStars: symbols.filter(s => s.starCount === 4).length,
+        threeStars: symbols.filter(s => s.starCount === 3).length,
+        twoStars: symbols.filter(s => s.starCount === 2).length,
+        oneStar: symbols.filter(s => s.starCount === 1).length
+      };
+
+      setStarSymbols(symbols);
+      setStarCounts(counts);
+    };
+
     connect<Camarilla>('/api/get_camrilla?stream=1', (data) => {
       const arr = Array.isArray(data) ? sortByTime<Camarilla>(data as Camarilla[]) : [];
       setCamarillaData(arr);
+      updateStarData();
     });
     connect<NDayHighLow>('/api/get_hilo?stream=1', (data) => {
       const arr = Array.isArray(data) ? sortByTime<NDayHighLow>(data as NDayHighLow[]) : [];
       setBreakoutData(arr);
+      updateStarData();
     });
     connect<Vals>('/api/get_val?stream=1', (data) => {
       const arr = Array.isArray(data) ? sortByTime<Vals>(data as Vals[]) : [];
       setVolumeData(arr);
+      updateStarData();
     });
     connect<VWAP>('/api/get_vwap?stream=1', (data) => {
       const arr = Array.isArray(data) ? sortByTime<VWAP>(data as VWAP[]) : [];
       setVwapData(arr);
+      updateStarData();
     });
 
     const cleanup = () => {
@@ -163,7 +215,7 @@ export default function MarketDataPage() {
   };
 
   // Drag & drop state for the summary cards
-  const [cardOrder, setCardOrder] = useState<string[]>(["camarilla", "highlow", "volume", "vwap"]);
+  const [cardOrder, setCardOrder] = useState<string[]>(["camarilla", "highlow", "volume", "vwap", "fourStars", "threeStars", "twoStars", "oneStar"]);
   const dragSrcIndex = useRef<number | null>(null);
 
   const onDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
@@ -213,7 +265,33 @@ export default function MarketDataPage() {
   };
 
   // Drag & drop for the main event data boxes
-  const [eventOrder, setEventOrder] = useState<string[]>(["camarilla", "highlow", "volume", "vwap"]);
+  const [eventOrder, setEventOrder] = useState<string[]>(["camarilla", "highlow", "volume", "vwap", "stars"]);
+  
+  type DataType = 'camarilla' | 'highlow' | 'volume' | 'vwap';
+  
+  const addSymbolPresence = (symbol: string, timestamp: string, type: DataType, symbolMap: Map<string, SymbolWithStars>) => {
+    const existing = symbolMap.get(symbol) || {
+      symbol,
+      starCount: 0,
+      timestamp,
+      presence: {
+        inCamarilla: false,
+        inHighLow: false,
+        inVolume: false,
+        inVWAP: false
+      }
+    };
+    
+    switch(type) {
+      case 'camarilla': existing.presence.inCamarilla = true; break;
+      case 'highlow': existing.presence.inHighLow = true; break;
+      case 'volume': existing.presence.inVolume = true; break;
+      case 'vwap': existing.presence.inVWAP = true; break;
+    }
+    
+    existing.starCount = Object.values(existing.presence).filter(Boolean).length;
+    symbolMap.set(symbol, existing);
+  };
   const eventDragSrcIndex = useRef<number | null>(null);
 
   const onEventDragStart = (e: React.DragEvent<HTMLDivElement>, index: number) => {
@@ -466,12 +544,69 @@ export default function MarketDataPage() {
                 );
               }
 
-              // vwap
+              if (key === 'vwap') {
+                return (
+                  <div key={`event-${idx}`} {...wrapperProps}>
+                    <div className="px-6 py-4" style={{ background: '#16a34a', color: 'white' }}>
+                      <h2 className="text-xl font-semibold flex items-center">
+                        📈 VWAP Events ({vwapData.length})
+                      </h2>
+                    </div>
+                    <div className="overflow-x-auto max-h-96">
+                      <table className="w-full">
+                        <thead className="table-head sticky top-0">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase">Symbol</th>
+                            <th className="px-4 py-3 text-right text-xs font-medium text-muted uppercase">VWAP</th>
+                            <th className="px-4 py-3 text-center text-xs font-medium text-muted uppercase">Type</th>
+                            <th className="px-4 py-3 text-center text-xs font-medium text-muted uppercase">Time</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y" style={{ background: 'var(--card-bg)' }}>
+                          {vwapData.length > 0 ? vwapData.map((item) => {
+                            const presence = getSymbolPresence(item.symbol);
+                            return (
+                              <tr key={`vwap-${item.symbol}-${item.timestamp}`} className="hover-surface transition-colors">
+                                <td className="px-4 py-3 text-sm font-medium text-strong">
+                                  <SymbolStars 
+                                    symbol={item.symbol}
+                                    inCamarilla={presence.inCamarilla}
+                                    inHighLow={presence.inHighLow}
+                                    inVolume={presence.inVolume}
+                                    inVWAP={presence.inVWAP}
+                                  />
+                                </td>
+                                <td className="px-4 py-3 text-sm text-strong text-right">₹{item.vwap?.toFixed(2)}</td>
+                                <td className="px-4 py-3 text-sm text-center">
+                                  <span className={`px-2 py-1 rounded-full text-xs ${getTypeBadgeColor(item.type)}`}>
+                                    {item.type}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-3 text-sm text-muted text-center">
+                                  {formatTime(item.timestamp)}
+                                </td>
+                              </tr>
+                            );
+                          }) : (
+                            <tr>
+                              <td colSpan={4} className="px-4 py-8 text-center text-muted">
+                                No VWAP events available
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                );
+              }
+
+              // stars
               return (
                 <div key={`event-${idx}`} {...wrapperProps}>
-                  <div className="px-6 py-4" style={{ background: '#16a34a', color: 'white' }}>
+                  <div className="px-6 py-4" style={{ background: '#6366f1', color: 'white' }}>
                     <h2 className="text-xl font-semibold flex items-center">
-                      📈 VWAP Events ({vwapData.length})
+                      ⭐ Star Ratings ({starSymbols.length})
                     </h2>
                   </div>
                   <div className="overflow-x-auto max-h-96">
@@ -479,40 +614,32 @@ export default function MarketDataPage() {
                       <thead className="table-head sticky top-0">
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-medium text-muted uppercase">Symbol</th>
-                          <th className="px-4 py-3 text-right text-xs font-medium text-muted uppercase">VWAP</th>
-                          <th className="px-4 py-3 text-center text-xs font-medium text-muted uppercase">Type</th>
+                          <th className="px-4 py-3 text-center text-xs font-medium text-muted uppercase">Stars</th>
                           <th className="px-4 py-3 text-center text-xs font-medium text-muted uppercase">Time</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y" style={{ background: 'var(--card-bg)' }}>
-                        {vwapData.length > 0 ? vwapData.map((item) => {
-                          const presence = getSymbolPresence(item.symbol);
-                          return (
-                            <tr key={`vwap-${item.symbol}-${item.timestamp}`} className="hover-surface transition-colors">
-                              <td className="px-4 py-3 text-sm font-medium text-strong">
-                                <SymbolStars 
-                                  symbol={item.symbol}
-                                  inCamarilla={presence.inCamarilla}
-                                  inHighLow={presence.inHighLow}
-                                  inVolume={presence.inVolume}
-                                  inVWAP={presence.inVWAP}
-                                />
-                              </td>
-                              <td className="px-4 py-3 text-sm text-strong text-right">₹{item.vwap?.toFixed(2)}</td>
-                              <td className="px-4 py-3 text-sm text-center">
-                                <span className={`px-2 py-1 rounded-full text-xs ${getTypeBadgeColor(item.type)}`}>
-                                  {item.type}
-                                </span>
-                              </td>
-                              <td className="px-4 py-3 text-sm text-muted text-center">
-                                {formatTime(item.timestamp)}
-                              </td>
-                            </tr>
-                          );
-                        }) : (
+                        {starSymbols.length > 0 ? starSymbols.map((item) => (
+                          <tr key={`star-${item.symbol}-${item.timestamp}`} className="hover-surface transition-colors">
+                            <td className="px-4 py-3 text-sm font-medium text-strong">
+                              {item.symbol}
+                            </td>
+                            <td className="px-4 py-3 text-sm text-center">
+                              <span>
+                                {item.presence.inCamarilla && <span style={{ color: '#7c3aed' }}>★</span>}
+                                {item.presence.inHighLow && <span style={{ color: '#f97316' }}>★</span>}
+                                {item.presence.inVolume && <span style={{ color: '#2563eb' }}>★</span>}
+                                {item.presence.inVWAP && <span style={{ color: '#16a34a' }}>★</span>}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-sm text-muted text-center">
+                              {formatTime(item.timestamp)}
+                            </td>
+                          </tr>
+                        )) : (
                           <tr>
-                            <td colSpan={4} className="px-4 py-8 text-center text-muted">
-                              No VWAP events available
+                            <td colSpan={3} className="px-4 py-8 text-center text-muted">
+                              No star ratings available
                             </td>
                           </tr>
                         )}
@@ -527,7 +654,7 @@ export default function MarketDataPage() {
 
         {/* Summary Cards (draggable/reorderable) */}
         {!loading && (
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-8 gap-4">
             {cardOrder.map((key, idx) => {
               const commonProps = {
                 draggable: true,
@@ -589,20 +716,105 @@ export default function MarketDataPage() {
                 );
               }
 
-              // vwap
-              return (
-                <div key={`card-${idx}`} {...commonProps}>
-                  <div className="flex items-center">
-                    <div className="flex-shrink-0">
-                      <span className="text-2xl">📈</span>
-                    </div>
-                    <div className="ml-3">
-                      <h3 className="text-sm font-medium text-strong">VWAP</h3>
-                      <p className="text-xl font-bold" style={{ color: '#16a34a' }}>{vwapData.length}</p>
+              if (key === 'vwap') {
+                return (
+                  <div key={`card-${idx}`} {...commonProps}>
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <span className="text-2xl">📈</span>
+                      </div>
+                      <div className="ml-3">
+                        <h3 className="text-sm font-medium text-strong">VWAP</h3>
+                        <p className="text-xl font-bold" style={{ color: '#16a34a' }}>{vwapData.length}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
+                );
+              }
+              
+              if (key === 'fourStars') {
+                return (
+                  <div key={`card-${idx}`} {...commonProps}>
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <span className="text-2xl">⭐</span>
+                      </div>
+                      <div className="ml-3">
+                        <h3 className="text-sm font-medium text-strong">4 Stars</h3>
+                        <div className="text-xl font-bold flex gap-1">
+                          <span style={{ color: '#7c3aed' }}>★</span>
+                          <span style={{ color: '#f97316' }}>★</span>
+                          <span style={{ color: '#2563eb' }}>★</span>
+                          <span style={{ color: '#16a34a' }}>★</span>
+                          <span className="ml-2">{starCounts.fourStars}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (key === 'threeStars') {
+                return (
+                  <div key={`card-${idx}`} {...commonProps}>
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <span className="text-2xl">⭐</span>
+                      </div>
+                      <div className="ml-3">
+                        <h3 className="text-sm font-medium text-strong">3 Stars</h3>
+                        <div className="text-xl font-bold flex gap-1">
+                          <span style={{ color: '#7c3aed' }}>★</span>
+                          <span style={{ color: '#f97316' }}>★</span>
+                          <span style={{ color: '#2563eb' }}>★</span>
+                          <span className="ml-2">{starCounts.threeStars}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (key === 'twoStars') {
+                return (
+                  <div key={`card-${idx}`} {...commonProps}>
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <span className="text-2xl">⭐</span>
+                      </div>
+                      <div className="ml-3">
+                        <h3 className="text-sm font-medium text-strong">2 Stars</h3>
+                        <div className="text-xl font-bold flex gap-1">
+                          <span style={{ color: '#7c3aed' }}>★</span>
+                          <span style={{ color: '#f97316' }}>★</span>
+                          <span className="ml-2">{starCounts.twoStars}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (key === 'oneStar') {
+                return (
+                  <div key={`card-${idx}`} {...commonProps}>
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <span className="text-2xl">⭐</span>
+                      </div>
+                      <div className="ml-3">
+                        <h3 className="text-sm font-medium text-strong">1 Star</h3>
+                        <div className="text-xl font-bold flex gap-1">
+                          <span style={{ color: '#7c3aed' }}>★</span>
+                          <span className="ml-2">{starCounts.oneStar}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+              return null;
             })}
           </div>
         )}

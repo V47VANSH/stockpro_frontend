@@ -190,7 +190,7 @@ export default function AdvanceDeclineChart({ selectedIndex }: AdvanceDeclineCha
         <ResponsiveContainer width="100%" height="100%">
           {chartType === 'line' ? (
             <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-default)" />
               <XAxis 
                 dataKey="timestamp" 
                 tickFormatter={formatTime}
@@ -224,7 +224,7 @@ export default function AdvanceDeclineChart({ selectedIndex }: AdvanceDeclineCha
             </LineChart>
           ) : (
             <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-default)" />
               <XAxis 
                 dataKey="timestamp" 
                 tickFormatter={formatTime}

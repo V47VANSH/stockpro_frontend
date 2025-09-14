@@ -22,7 +22,7 @@ const indices = [
 
 export default function Page() {
   const [data, setData] = useState<MoversData | null>(null);
-  const [selectedIndex, setSelectedIndex] = useState('sensex');
+  const [selectedIndex, setSelectedIndex] = useState('nifty50');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
